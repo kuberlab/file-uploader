@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -55,9 +57,22 @@ func WrapLogger(f http.Handler) http.Handler {
 	})
 }
 
+// exists returns whether the given file or directory exists or not
+func Exists(path string) bool {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+	return true
+}
+
 func main() {
 	r.Path("/upload").Methods("POST").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		dest := r.Header.Get("Kube-Destination")
+		createDir, _ := strconv.ParseBool(r.Header.Get("Kube-Create-Dir"))
 
 		if dest == "" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -65,21 +80,31 @@ func main() {
 			return
 		}
 
+		dirName := filepath.Dir(dest)
+		if !Exists(dirName) && createDir {
+			// Try to create dir
+			if err := os.MkdirAll(dirName, os.ModePerm); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(fmt.Sprintf("Cannot create dir: %v\n", err.Error())))
+				return
+			}
+		}
+
 		file, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE, 0644)
 
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Cannot create file: %v", err.Error())))
+			w.Write([]byte(fmt.Sprintf("Cannot create file: %v\n", err.Error())))
 			return
 		}
 		written, err := io.Copy(file, r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(fmt.Sprintf("Error while writing file: %v", err.Error())))
+			w.Write([]byte(fmt.Sprintf("Error while writing file: %v\n", err.Error())))
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fmt.Sprintf("File %v created. Written %v bytes.", dest, written)))
+		w.Write([]byte(fmt.Sprintf("File %v created. Written %v bytes.\n", dest, written)))
 	})
 
 	logrus.Info("Starting...")

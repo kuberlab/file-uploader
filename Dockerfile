@@ -1,4 +1,4 @@
-FROM alpine:3.5
+FROM alpine:3.9
 
 COPY . /go/src/github.com/kuberlab/file-uploader
 
@@ -7,7 +7,7 @@ RUN apk --no-cache add -t build-deps build-base go git \
 	&& cd /go/src/github.com/kuberlab/file-uploader \
 	&& export GOPATH=/go \
 	&& go get \
-	&& go build -o /bin/file-uploader \
+	&& go build -ldflags="-s -w" -o /bin/file-uploader \
 	&& rm -rf /go \
 	&& apk del --purge build-deps
 
